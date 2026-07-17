@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /mentions-legales.html
+Disallow: /confidentialite.html
+
+Sitemap: https://www.xlconduite.ch/sitemap.xml
