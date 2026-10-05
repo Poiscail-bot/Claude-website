@@ -2,6 +2,7 @@ name: MacNettoyeur
 
 on:
   push:
+    branches: ["**"]
     paths:
       - "mac-cleaner/**"
       - ".github/workflows/mac-cleaner.yml"
@@ -9,6 +10,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: mac-cleaner-release
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -24,6 +29,19 @@ jobs:
         run: ./scripts/build-app.sh
       - name: Création du DMG
         run: ./scripts/make-dmg.sh
+      - name: Test de lancement (signature + démarrage + capture d'écran)
+        run: |
+          codesign --verify --deep --strict --verbose=2 build/MacNettoyeur.app
+          open build/MacNettoyeur.app
+          sleep 15
+          if ! pgrep -x MacNettoyeur; then
+            echo "L'app s'est arrêtée au lancement"
+            ls ~/Library/Logs/DiagnosticReports/ || true
+            cat ~/Library/Logs/DiagnosticReports/MacNettoyeur* 2>/dev/null | head -80 || true
+            exit 1
+          fi
+          screencapture -x build/capture.png || true
+          pkill -x MacNettoyeur || true
       - uses: actions/upload-artifact@v4
         with:
           name: MacNettoyeur
@@ -33,8 +51,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete macnettoyeur-latest --yes --cleanup-tag || true
-          gh release create macnettoyeur-latest build/MacNettoyeur.dmg \
+          # Supprime toute version précédente (brouillons compris) et son tag.
+          for id in $(gh api "repos/${{ github.repository }}/releases" --jq '.[] | select(.tag_name=="macnettoyeur-latest") | .id'); do
+            gh api -X DELETE "repos/${{ github.repository }}/releases/$id"
+          done
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/macnettoyeur-latest" || true
+          ASSETS=(build/MacNettoyeur.dmg)
+          [ -f build/capture.png ] && ASSETS+=(build/capture.png)
+          gh release create macnettoyeur-latest "${ASSETS[@]}" \
             --title "MacNettoyeur (dernière version)" \
             --notes-file "Support/À lire avant d'ouvrir.txt" \
             --target "${{ github.sha }}" --prerelease
