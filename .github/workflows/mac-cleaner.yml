@@ -1,0 +1,30 @@
+name: MacNettoyeur
+
+on:
+  push:
+    paths:
+      - "mac-cleaner/**"
+      - ".github/workflows/mac-cleaner.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mac-cleaner
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version de Swift
+        run: swift --version
+      - name: Compilation de l'app
+        run: ./scripts/build-app.sh
+      - name: Création du DMG
+        run: ./scripts/make-dmg.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MacNettoyeur
+          path: mac-cleaner/build/MacNettoyeur.dmg
+          if-no-files-found: error
+      - name: Tests
+        run: swift test
